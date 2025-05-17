@@ -48,6 +48,7 @@ ALLOWED_HOSTS = ['*']
 # Application definition
 
 INSTALLED_APPS = [
+    'produtos.apps.ProdutosConfig',  # Adicione o app de produtos
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
