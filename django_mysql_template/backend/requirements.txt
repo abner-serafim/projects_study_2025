@@ -1,0 +1,8 @@
+# --- backend/requirements.txt ---
+# Dependências Python para o projeto Django
+
+Django>=5.2.1,<5.3.0 # Especifica uma faixa para maior controle de versão
+mysqlclient>=2.2.7,<2.3.0 # Driver MySQL para Python
+python-dotenv>=1.1.0,<1.2.0 # Para carregar variáveis de .env (útil, embora o Docker Compose também gerencie)
+gunicorn>=23.0.0,<23.1.0 # Servidor WSGI para produção (bom ter no template)
+# Adicione outras dependências do seu projeto aqui
