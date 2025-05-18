@@ -1,0 +1,149 @@
+name: laravel
+
+services:
+  # Serviço da Aplicação PHP (PHP-FPM)
+  app:
+    build:
+      context: ./backend # Caminho para a pasta com o projeto Laravel e o Dockerfile
+      dockerfile: Dockerfile # Nome do Dockerfile dentro do contexto
+      args: # Passa argumentos para o Dockerfile (para IDs de usuário/grupo)
+        UID: "${UID:-1000}" # Usa a variável de ambiente UID ou 1000 como padrão
+        GID: "${GID:-1000}" # Usa a variável de ambiente GID ou 1000 como padrão
+    ports:
+      - "9000:9000"
+      - "8000:8000"
+      - "8088:80" # Porta para o Vite (se usado)
+      - "5173:5173" # Porta para o Vite (se usado)
+    volumes:
+      # Monta o código da aplicação Laravel local no contêiner para desenvolvimento
+      - ./backend:/var/www/html
+      # Cache do Composer (opcional, mas acelera instalações repetidas)
+      - ./docker/cache:/tmp/composer
+    environment:
+      # Variáveis de ambiente para a aplicação Laravel (serão usadas pelo .env do Laravel)
+      # O Laravel lerá estas do seu arquivo backend/.env, mas podemos definir defaults aqui
+      APP_NAME: "${APP_NAME:-Laravel}"
+      APP_ENV: "${APP_ENV:-local}"
+      APP_KEY: "${APP_KEY:-}" # Deve ser gerada com 'php artisan key:generate'
+      APP_DEBUG: "${APP_DEBUG:-true}"
+      APP_URL: "${APP_URL:-http://localhost:8000}" # Porta do Nginx no host
+
+      LOG_CHANNEL: stderr # Envia logs para o Docker para fácil visualização
+      LOG_LEVEL: debug
+
+      DB_CONNECTION: mysql
+      DB_HOST: db # Nome do serviço do banco de dados
+      DB_PORT: 3306
+      DB_DATABASE: "${DB_DATABASE:-laravel_db}"
+      DB_USERNAME: "${DB_USERNAME:-laraveluser}"
+      DB_PASSWORD: "${DB_PASSWORD:-laravelpass}"
+
+      # Configurações para Redis (se usado)
+      REDIS_HOST: redis
+      REDIS_PASSWORD: null
+      REDIS_PORT: 6379
+
+      # Configurações para Mailpit (servidor de e-mail para desenvolvimento)
+      MAIL_MAILER: smtp
+      MAIL_HOST: mailpit
+      MAIL_PORT: 1025
+      MAIL_USERNAME: null
+      MAIL_PASSWORD: null
+      MAIL_ENCRYPTION: null
+      MAIL_FROM_ADDRESS: "hello@example.com"
+      MAIL_FROM_NAME: "${APP_NAME}"
+    working_dir: /var/www/html
+    # Para rodar comandos como usuário não-root (correspondendo ao UID/GID do host)
+    # user: "${UID:-1000}:${GID:-1000}" # Descomente se necessário, pode ajudar com permissões
+    depends_on:
+      db:
+        condition: service_healthy
+      redis: # Opcional, se estiver usando Redis
+        condition: service_started # Redis geralmente inicia rápido
+    networks:
+      - laravel_network
+    restart: unless-stopped
+
+  # Serviço do Servidor Web (Nginx)
+#  web:
+#    image: nginx:1.25-alpine # Imagem Nginx baseada em Alpine
+#    ports:
+#      # Mapeia a porta 8080 do host para a porta 80 do contêiner Nginx
+#      - "${NGINX_PORT_HOST:-8080}:80"
+#    volumes:
+#      # Monta o código da aplicação Laravel (especificamente a pasta 'public')
+#      - ./backend/public:/var/www/html/public
+#      # Monta o arquivo de configuração do Nginx
+#      - ./docker/nginx/default.conf:/etc/nginx/conf.d/default.conf
+#    depends_on:
+#      - app # Nginx depende do serviço PHP-FPM ('app')
+#    networks:
+#      - laravel_network
+#    restart: unless-stopped
+
+  # Serviço do Banco de Dados (MySQL)
+  db:
+    image: mysql:8.0 # Imagem MySQL (versão 8.0)
+    environment:
+      MYSQL_DATABASE: "${DB_DATABASE:-laravel_db}"
+      MYSQL_USER: "${DB_USERNAME:-laraveluser}"
+      MYSQL_PASSWORD: "${DB_PASSWORD:-laravelpass}"
+      MYSQL_ROOT_PASSWORD: "${DB_ROOT_PASSWORD:-rootsecret}"
+    volumes:
+      # Volume nomeado para persistir os dados do MySQL
+      - ./docker/mysql/data:/var/lib/mysql
+      # Se precisar de configurações customizadas do MySQL (my.cnf), descomente:
+      # - ./docker/mysql/my.cnf:/etc/mysql/conf.d/custom.cnf
+    ports:
+      # Mapeia a porta 3306 do contêiner para uma porta no host
+      - "${DB_PORT_HOST:-3306}:3306"
+    networks:
+      - laravel_network
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${DB_ROOT_PASS:-rootpassword}"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+      start_period: 30s
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "${REDIS_PORT_HOST:-6379}:6379"
+    volumes:
+      - ./docker/redis/data:/data
+    networks:
+      - laravel_network
+    restart: unless-stopped
+
+  mailpit:
+    image: axllent/mailpit:latest
+    ports:
+      - "${MAILPIT_SMTP_PORT_HOST:-1025}:1025" # Porta SMTP
+      - "${MAILPIT_WEB_PORT_HOST:-8025}:8025"  # Interface Web do Mailpit
+    networks:
+      - laravel_network
+    restart: unless-stopped
+
+  phpmyadmin:
+    image: phpmyadmin:latest
+    environment:
+      PMA_HOST: 'db'          # Conecta ao serviço 'db' (MySQL)
+      PMA_PORT: ${DB_PORT:-3306}
+      # PMA_USER: 'root'      # Opcional: para login automático (requer PMA_ARBITRARY=1 e outras configs)
+      # PMA_PASSWORD: '${DB_ROOT_PASS:-rootpassword}' # Opcional
+      MYSQL_ROOT_PASSWORD: '${DB_ROOT_PASS:-rootpassword}' # Para phpMyAdmin se conectar como root
+      UPLOAD_LIMIT: 1G        # Limite de upload para arquivos SQL (opcional)
+    ports:
+      - "8888:80"             # Conforme solicitado, phpMyAdmin na porta 8888 do host
+    depends_on:
+      - db                    # Precisa do DB, mas não precisa esperar o healthcheck tão estritamente
+      # quanto a aplicação Django. Ele tentará conectar.
+    restart: unless-stopped
+    networks: # Atribui este serviço à rede customizada
+      - laravel_network
+
+networks:
+  laravel_network: # Define uma rede customizada para os serviços
+    driver: bridge

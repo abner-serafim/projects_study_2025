@@ -1,4 +1,4 @@
-version: '3.9'
+name: django
 
 networks: # Define a rede customizada
   django_network:
@@ -7,7 +7,6 @@ networks: # Define a rede customizada
 services:
   db:
     image: mysql:latest
-    container_name: mysql_db_service
     environment:
       MYSQL_DATABASE: '${DB_NAME:-djangodb}'             # Nome do banco de dados
       MYSQL_USER: '${DB_USER:-djangouser}'               # Usuário do banco
@@ -34,7 +33,6 @@ services:
     build:
       context: ./backend  # Caminho para a pasta com o Dockerfile do Django
       dockerfile: Dockerfile
-    container_name: django_backend_service
     # Comando para rodar após o build da imagem e o DB estar saudável
     # Primeiro espera o DB (redundante se healthcheck é 100% confiável, mas seguro),
     # depois migra e então inicia o servidor de desenvolvimento.
@@ -66,7 +64,6 @@ services:
 
   phpmyadmin:
     image: phpmyadmin:latest
-    container_name: phpmyadmin_service
     environment:
       PMA_HOST: 'db'          # Conecta ao serviço 'db' (MySQL)
       PMA_PORT: ${DB_PORT:-3306}
